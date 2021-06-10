@@ -16,5 +16,6 @@ This tool is not supposed to:
 - Remove protection and read-only status from channel groups and save them, allowing them to be opened by the Quest3D editor for inspection or editing.
 - Load .cgr files into the game (**NOTE:** Not tested properly, don't count on it working)
 - Read strings from some channels (Support added for the most common ones)
+- Read script source code of Lua script channels
 
 More to come soon-ish.
