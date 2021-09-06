@@ -4,6 +4,7 @@
 #include <d3d9.h>
 #include <assert.h>
 #include <detours.h>
+#include <fstream>
 
 #include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_win32.h"
@@ -18,6 +19,7 @@
 #include <A3d_Channels.h>
 #include <A3d_EngineInterface.h>
 #include <Aco_String.h>
+#include <Aco_DX8_Texture.h>
 
 //DISCLAIMER: I have literally never done DirectX stuff before
 typedef long(__stdcall* Reset)(LPDIRECT3DDEVICE9, D3DPRESENT_PARAMETERS*);
@@ -52,6 +54,12 @@ static const char* (__thiscall* Lua_GetScript)(void* self) = nullptr;
 
 static void (__thiscall* StringChannel_SetString)(Aco_StringChannel* self, const char* string) = nullptr;
 static BOOL (__thiscall* Lua_SetScript)(void* self, const char* string) = nullptr;
+
+static int (__thiscall* Aco_DX8_Texture_GetDesiredWidth)(Aco_DX8_Texture* self) = nullptr;
+static int (__thiscall* Aco_DX8_Texture_GetDesiredHeight)(Aco_DX8_Texture* self) = nullptr;
+static IDirect3DTexture9* (__thiscall* Aco_DX8_Texture_GetTexture)(Aco_DX8_Texture* self) = nullptr;
+static char* (__thiscall* Aco_DX8_Texture_GetTextureBuffer)(Aco_DX8_Texture* self) = nullptr;
+static int (__thiscall* Aco_DX8_Texture_GetBufferSize)(Aco_DX8_Texture* self) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -59,6 +67,7 @@ bool showMenu;
 HWND gameHandle;
 WNDPROC g_WndProc_o;
 ImGui::FileBrowser saveGroupFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
+ImGui::FileBrowser saveTextureFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
 ImGui::FileBrowser loadGroupFileDialog(0);
 EngineInterface* engine = nullptr;
 int channelGroupToUse = 0;
@@ -126,8 +135,11 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         saveGroupFileDialog.SetTitle("Save channel group");
         saveGroupFileDialog.SetTypeFilters({ ".cgr" });
 
-        saveGroupFileDialog.SetTitle("Load channel group");
-        saveGroupFileDialog.SetTypeFilters({ ".cgr" });
+        loadGroupFileDialog.SetTitle("Load channel group");
+        loadGroupFileDialog.SetTypeFilters({ ".cgr" });
+
+        saveTextureFileDialog.SetTitle("Save texture");
+        saveTextureFileDialog.SetTypeFilters({ ".tga", ".png", ".jpg"});
 
         init = true;
     }
@@ -205,6 +217,19 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             ImGui::Text("Script: \n%s", Lua_GetScript(channel));
                         }
 
+                        if (strstr(stdstringGUID.c_str(), "BC052C38-2D5D")) {
+                            Aco_DX8_Texture* texture = (Aco_DX8_Texture*)channel;
+                            int height = Aco_DX8_Texture_GetDesiredHeight(texture);
+                            int width = Aco_DX8_Texture_GetDesiredWidth(texture);
+                            IDirect3DTexture9* d3dTexture = Aco_DX8_Texture_GetTexture(texture);
+                            
+                            ImGui::Text("Texture size: %dx%d", width, height);
+                            ImGui::Image((void*)d3dTexture, ImVec2(width, height));
+                            if(ImGui::Button("Save texture")) {
+                                saveTextureFileDialog.Open();
+                            }
+                        }
+
                         ImGui::Spacing();
                     }
                 }
@@ -220,6 +245,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
         saveGroupFileDialog.Display();
         loadGroupFileDialog.Display();
+        saveTextureFileDialog.Display();
 
         if (saveGroupFileDialog.HasSelected())
         {
@@ -233,6 +259,18 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
             if (newGroup != nullptr)
             {
                 ChannelGroup_CallStartChannel(newGroup);
+            }
+            loadGroupFileDialog.ClearSelected();
+        }
+        if (saveTextureFileDialog.HasSelected())
+        {
+            std::ofstream binaryFile(saveTextureFileDialog.GetSelected().string().c_str(), std::ios::out | std::ios::binary);
+            if (binaryFile.is_open())
+            {
+                Aco_DX8_Texture* texture = (Aco_DX8_Texture*)channel;
+                char* data = Aco_DX8_Texture_GetTextureBuffer(texture);
+                int size = Aco_DX8_Texture_GetBufferSize(texture);
+                binaryFile.write(data, size);
             }
             loadGroupFileDialog.ClearSelected();
         }
@@ -365,6 +403,22 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Lua_SetScript =
             (BOOL (__thiscall*)(void*, const char*))
             DetourFindFunction("6514FE12-88CF-480B-A3D8-7730C0CD23B3.dll", "?SetScript@Aco_Lua@@UAE_NPBD@Z");
+
+        Aco_DX8_Texture_GetDesiredWidth =
+            (int (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetDesiredWidth@Aco_DX8_Texture@@UAEHXZ");
+        Aco_DX8_Texture_GetDesiredHeight =
+            (int (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetDesiredHeight@Aco_DX8_Texture@@UAEHXZ");
+        Aco_DX8_Texture_GetTexture =
+            (IDirect3DTexture9* (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetTexture@Aco_DX8_Texture@@UAEPAUIDirect3DTexture9@@XZ");
+        Aco_DX8_Texture_GetTextureBuffer =
+            (char* (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetTextureBuffer@Aco_DX8_Texture@@UAEPADXZ");
+        Aco_DX8_Texture_GetBufferSize =
+            (int (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetBufferSize@Aco_DX8_Texture@@UAEHXZ");
 #pragma endregion
 
         

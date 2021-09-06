@@ -72,13 +72,13 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <LinkIncremental>true</LinkIncremental>
-    <IncludePath>C:\q3dsdk\include;$(WindowsSDK_IncludePath);$(IncludePath)</IncludePath>
-    <LibraryPath>$(WindowsSDK_LibraryPath);C:\q3dsdk\lib;$(LibraryPath)</LibraryPath>
+    <IncludePath>$(WindowsSDK_IncludePath);$(IncludePath);$(DXSDK_DIR)Include;C:\q3dsdk\include;$(DXSDK_DIR)Include</IncludePath>
+    <LibraryPath>$(WindowsSDK_LibraryPath);C:\q3dsdk\lib;$(LibraryPath);$(DXSDK_DIR)Lib\x86;$(DXSDK_DIR)Lib\x86;C:\q3dsdk\lib</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
-    <IncludePath>C:\q3dsdk\include;$(WindowsSDK_IncludePath)</IncludePath>
-    <LibraryPath>$(WindowsSDK_IncludePath);C:\q3dsdk\lib</LibraryPath>
+    <IncludePath>$(WindowsSDK_IncludePath);;$(DXSDK_DIR)Include;C:\q3dsdk\include;$(DXSDK_DIR)Include</IncludePath>
+    <LibraryPath>$(WindowsSDK_IncludePath);C:\q3dsdk\lib;$(DXSDK_DIR)Lib\x86;$(DXSDK_DIR)Lib\x86;C:\q3dsdk\lib</LibraryPath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
