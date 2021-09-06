@@ -49,6 +49,9 @@ static const char* (__thiscall* Channel_GetChannelName)(A3d_Channel* self) = nul
 static const char* (__thiscall* StringChannel_GetString)(Aco_StringChannel* self) = nullptr;
 static const char* (__thiscall* StringOperator_GetString)(void* self) = nullptr;
 static const char* (__thiscall* Lua_GetScript)(void* self) = nullptr;
+
+static void (__thiscall* StringChannel_SetString)(Aco_StringChannel* self, const char* string) = nullptr;
+static BOOL (__thiscall* Lua_SetScript)(void* self, const char* string) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -61,6 +64,7 @@ EngineInterface* engine = nullptr;
 int channelGroupToUse = 0;
 int channelInGroupToUse = 2;
 char newGroupName[128] = "New Group";
+char newText[1024] = "New Text";
 
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
@@ -186,6 +190,11 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
                         if (strstr(stdstringGUID.c_str(), "6E6FB247-4627")) {
                             ImGui::Text("Text in channel: %s", StringChannel_GetString((Aco_StringChannel*)channel));
+                            
+                            ImGui::InputText("New text to set", newText, IM_ARRAYSIZE(newText));
+                            if (ImGui::Button("Set text")) {
+                                StringChannel_SetString((Aco_StringChannel*)channel, newText);
+                            }
                         }
 
                         if (strstr(stdstringGUID.c_str(), "F26BB40B-B196")) {
@@ -349,6 +358,13 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Lua_GetScript =
             (const char* (__thiscall*)(void*))
             DetourFindFunction("6514FE12-88CF-480B-A3D8-7730C0CD23B3.dll", "?GetScript@Aco_Lua@@UAEPBDXZ");
+
+        StringChannel_SetString =
+            (void (__thiscall*)(Aco_StringChannel*, const char*))
+            DetourFindFunction("6E6FB247-4627-4FBE-8973-48344F23881E.dll", "?SetString@Aco_StringChannel@@UAEXPBD@Z");
+        Lua_SetScript =
+            (BOOL (__thiscall*)(void*, const char*))
+            DetourFindFunction("6514FE12-88CF-480B-A3D8-7730C0CD23B3.dll", "?SetScript@Aco_Lua@@UAE_NPBD@Z");
 #pragma endregion
 
         
