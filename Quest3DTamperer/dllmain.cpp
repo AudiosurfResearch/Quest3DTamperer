@@ -2,6 +2,7 @@
 #include "pch.h"
 #include "kiero/kiero.h"
 #include <d3d9.h>
+#include <d3d9types.h>
 #include <assert.h>
 #include <detours.h>
 #include <fstream>
@@ -60,6 +61,11 @@ static int (__thiscall* Aco_DX8_Texture_GetDesiredHeight)(Aco_DX8_Texture* self)
 static IDirect3DTexture9* (__thiscall* Aco_DX8_Texture_GetTexture)(Aco_DX8_Texture* self) = nullptr;
 static char* (__thiscall* Aco_DX8_Texture_GetTextureBuffer)(Aco_DX8_Texture* self) = nullptr;
 static int (__thiscall* Aco_DX8_Texture_GetBufferSize)(Aco_DX8_Texture* self) = nullptr;
+static BOOL (__thiscall* Aco_DX8_Texture_LoadTextureFromFile)(Aco_DX8_Texture* self, char* path) = nullptr;
+static HRESULT (__thiscall* Aco_DX8_Texture_LockTexture)(Aco_DX8_Texture* self, int level, D3DLOCKED_RECT& pLockedRect) = nullptr;
+static void (__thiscall* Aco_DX8_Texture_UnlockTexture)(Aco_DX8_Texture* self, int level) = nullptr;
+static int (__thiscall* Aco_DX8_Texture_GetMipMapLevels)(Aco_DX8_Texture* self) = nullptr;
+static D3DSURFACE_DESC (__thiscall* Aco_DX8_Texture_GetTextureDescription)(Aco_DX8_Texture* self, int lvl) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -69,11 +75,15 @@ WNDPROC g_WndProc_o;
 ImGui::FileBrowser saveGroupFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
 ImGui::FileBrowser saveTextureFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
 ImGui::FileBrowser loadGroupFileDialog(0);
+ImGui::FileBrowser loadTextureFileDialog(0);
 EngineInterface* engine = nullptr;
 int channelGroupToUse = 0;
-int channelInGroupToUse = 2;
+int channelInGroupToUse = 1;
+int mipmapLevelToUse = 0;
 char newGroupName[128] = "New Group";
 char newText[1024] = "New Text";
+bool textureLocked = false;
+bool previewTexture = true;
 
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
@@ -141,6 +151,9 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         saveTextureFileDialog.SetTitle("Save texture");
         saveTextureFileDialog.SetTypeFilters({ ".tga", ".png", ".jpg"});
 
+        loadTextureFileDialog.SetTitle("Load texture");
+        loadTextureFileDialog.SetTypeFilters({ ".tga", ".png", ".jpg" });
+
         init = true;
     }
 
@@ -155,6 +168,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
         A3d_ChannelGroup* group = nullptr;
         A3d_Channel* channel = nullptr;
+        std::string channelGUID;
         
         ImGui::Begin("Quest3DTamperer");
         ImGui::Spacing();
@@ -198,6 +212,8 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                         StringFromCLSID(channel->GetChannelType().guid, &guidString);
                         std::wstring wstring = std::wstring(guidString);
                         std::string stdstringGUID = utf8_encode(wstring);
+                        channelGUID = stdstringGUID;
+
                         ImGui::Text(stdstringGUID.c_str());
 
                         if (strstr(stdstringGUID.c_str(), "6E6FB247-4627")) {
@@ -219,14 +235,22 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
                         if (strstr(stdstringGUID.c_str(), "BC052C38-2D5D")) {
                             Aco_DX8_Texture* texture = (Aco_DX8_Texture*)channel;
-                            int height = Aco_DX8_Texture_GetDesiredHeight(texture);
-                            int width = Aco_DX8_Texture_GetDesiredWidth(texture);
-                            IDirect3DTexture9* d3dTexture = Aco_DX8_Texture_GetTexture(texture);
-                            
-                            ImGui::Text("Texture size: %dx%d", width, height);
-                            ImGui::Image((void*)d3dTexture, ImVec2(width, height));
+                            ImGui::Text("Mipmap level count: %d", Aco_DX8_Texture_GetMipMapLevels(texture));
+                            ImGui::InputInt("Select Mipmap level", &mipmapLevelToUse, 1, 10);
+                            ImGui::Checkbox("Enable preview", &previewTexture);
+
+                            if (!textureLocked && previewTexture) {
+                                IDirect3DTexture9* d3dTexture = Aco_DX8_Texture_GetTexture(texture);
+                                D3DSURFACE_DESC description = Aco_DX8_Texture_GetTextureDescription(texture, mipmapLevelToUse);
+                                ImGui::Text("Texture size: %dx%d", description.Width, description.Height);
+                                ImGui::Image((void*)d3dTexture, ImVec2(description.Width, description.Height));
+                            }
+
                             if(ImGui::Button("Save texture")) {
                                 saveTextureFileDialog.Open();
+                            }
+                            if (ImGui::Button("Load texture")) {
+                                loadTextureFileDialog.Open();
                             }
                         }
 
@@ -246,6 +270,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         saveGroupFileDialog.Display();
         loadGroupFileDialog.Display();
         saveTextureFileDialog.Display();
+        loadTextureFileDialog.Display();
 
         if (saveGroupFileDialog.HasSelected())
         {
@@ -271,6 +296,23 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                 char* data = Aco_DX8_Texture_GetTextureBuffer(texture);
                 int size = Aco_DX8_Texture_GetBufferSize(texture);
                 binaryFile.write(data, size);
+            }
+            loadGroupFileDialog.ClearSelected();
+        }
+        if (loadTextureFileDialog.HasSelected())
+        {
+            if (strstr(channelGUID.c_str(), "BC052C38-2D5D")) {
+                textureLocked = true;
+                Aco_DX8_Texture* texture = (Aco_DX8_Texture*)channel;
+                D3DSURFACE_DESC description = Aco_DX8_Texture_GetTextureDescription(texture, mipmapLevelToUse);
+                D3DLOCKED_RECT lockedRect;
+                lockedRect.pBits = (void*)Aco_DX8_Texture_GetTextureBuffer(texture);
+                lockedRect.Pitch = description.Width * 4;
+
+                Aco_DX8_Texture_LockTexture(texture, mipmapLevelToUse, lockedRect);
+                Aco_DX8_Texture_LoadTextureFromFile(texture, (char*)loadTextureFileDialog.GetSelected().string().c_str());
+                Aco_DX8_Texture_UnlockTexture(texture, mipmapLevelToUse);
+                textureLocked = false;
             }
             loadGroupFileDialog.ClearSelected();
         }
@@ -419,9 +461,24 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Aco_DX8_Texture_GetBufferSize =
             (int (__thiscall*)(Aco_DX8_Texture*))
             DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetBufferSize@Aco_DX8_Texture@@UAEHXZ");
+        Aco_DX8_Texture_LoadTextureFromFile =
+            (BOOL (__thiscall*)(Aco_DX8_Texture*, char*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?LoadTextureFromFile@Aco_DX8_Texture@@UAE_NPAD@Z");
+        Aco_DX8_Texture_LockTexture =
+            (HRESULT (__thiscall*)(Aco_DX8_Texture*, int, D3DLOCKED_RECT&))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?LockTexture@Aco_DX8_Texture@@UAEJHAAU_D3DLOCKED_RECT@@@Z");
+        Aco_DX8_Texture_UnlockTexture =
+            (void (__thiscall*)(Aco_DX8_Texture*, int))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?UnlockTexture@Aco_DX8_Texture@@UAEXH@Z");
+        Aco_DX8_Texture_GetMipMapLevels =
+            (int (__thiscall*)(Aco_DX8_Texture*))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetMipMapLevels@Aco_DX8_Texture@@UAEHXZ");
+        Aco_DX8_Texture_GetTextureDescription =
+            (D3DSURFACE_DESC(__thiscall*)(Aco_DX8_Texture*, int))
+            DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetTextureDescription@Aco_DX8_Texture@@UAE?AU_D3DSURFACE_DESC@@H@Z");
 #pragma endregion
 
-        
+
 
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
