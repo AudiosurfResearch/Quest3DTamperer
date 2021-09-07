@@ -66,6 +66,8 @@ static HRESULT (__thiscall* Aco_DX8_Texture_LockTexture)(Aco_DX8_Texture* self, 
 static void (__thiscall* Aco_DX8_Texture_UnlockTexture)(Aco_DX8_Texture* self, int level) = nullptr;
 static int (__thiscall* Aco_DX8_Texture_GetMipMapLevels)(Aco_DX8_Texture* self) = nullptr;
 static D3DSURFACE_DESC (__thiscall* Aco_DX8_Texture_GetTextureDescription)(Aco_DX8_Texture* self, int lvl) = nullptr;
+
+static D3DMATERIAL9 (__thiscall* Aco_DX8_MaterialChannel_GetMaterial)(void* self) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -239,6 +241,8 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             ImGui::InputInt("Select Mipmap level", &mipmapLevelToUse, 1, 10);
                             ImGui::Checkbox("Enable preview", &previewTexture);
 
+                            //You should turn off the preview when swapping textures
+                            //Else the game WILL crash
                             if (!textureLocked && previewTexture) {
                                 IDirect3DTexture9* d3dTexture = Aco_DX8_Texture_GetTexture(texture);
                                 D3DSURFACE_DESC description = Aco_DX8_Texture_GetTextureDescription(texture, mipmapLevelToUse);
@@ -252,6 +256,20 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             if (ImGui::Button("Load texture")) {
                                 loadTextureFileDialog.Open();
                             }
+                        }
+
+                        if (strstr(stdstringGUID.c_str(), "376A9C13-8D66")) {
+                            D3DMATERIAL9 material = Aco_DX8_MaterialChannel_GetMaterial(channel);
+                            ImGui::Text("Power: %f", material.Power);
+
+                            ImVec4 specular = ImVec4(material.Specular.r, material.Specular.g, material.Specular.b, material.Specular.a);
+                            ImGui::TextColored(specular, "Specular color");
+                            ImVec4 emissive = ImVec4(material.Emissive.r, material.Emissive.g, material.Emissive.b, material.Emissive.a);
+                            ImGui::TextColored(emissive, "Emissive color");
+                            ImVec4 ambient = ImVec4(material.Ambient.r, material.Ambient.g, material.Ambient.b, material.Ambient.a);
+                            ImGui::TextColored(ambient, "Ambient color");
+                            ImVec4 diffuse = ImVec4(material.Diffuse.r, material.Diffuse.g, material.Diffuse.b, material.Diffuse.a);
+                            ImGui::TextColored(diffuse, "Diffuse color");
                         }
 
                         ImGui::Spacing();
@@ -474,8 +492,11 @@ BOOL APIENTRY DllMain( HMODULE hModule,
             (int (__thiscall*)(Aco_DX8_Texture*))
             DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetMipMapLevels@Aco_DX8_Texture@@UAEHXZ");
         Aco_DX8_Texture_GetTextureDescription =
-            (D3DSURFACE_DESC(__thiscall*)(Aco_DX8_Texture*, int))
+            (D3DSURFACE_DESC (__thiscall*)(Aco_DX8_Texture*, int))
             DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetTextureDescription@Aco_DX8_Texture@@UAE?AU_D3DSURFACE_DESC@@H@Z");
+        Aco_DX8_MaterialChannel_GetMaterial =
+            (D3DMATERIAL9 (__thiscall*)(void*))
+            DetourFindFunction("376A9C13-8D66-49EC-BAE5-D59BE13BC519.dll", "?GetMaterialValue@Aco_DX8_MaterialChannel@@UAEMH@Z");
 #pragma endregion
 
 
