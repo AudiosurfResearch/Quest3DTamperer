@@ -21,6 +21,7 @@
 #include <A3d_EngineInterface.h>
 #include <Aco_String.h>
 #include <Aco_DX8_Texture.h>
+#include <Aco_DX8_ObjectData.h>
 
 //DISCLAIMER: I have literally never done DirectX stuff before
 typedef long(__stdcall* Reset)(LPDIRECT3DDEVICE9, D3DPRESENT_PARAMETERS*);
@@ -68,6 +69,10 @@ static int (__thiscall* Aco_DX8_Texture_GetMipMapLevels)(Aco_DX8_Texture* self) 
 static D3DSURFACE_DESC (__thiscall* Aco_DX8_Texture_GetTextureDescription)(Aco_DX8_Texture* self, int lvl) = nullptr;
 
 static D3DMATERIAL9 (__thiscall* Aco_DX8_MaterialChannel_GetMaterial)(void* self) = nullptr;
+
+static int (__thiscall* Aco_DX8_ObjectDataChannel_GetVertexCount)(Aco_DX8_ObjectDataChannel* self) = nullptr;
+
+static D3DXVECTOR3 (__thiscall* Aco_DX8_ObjectChannel_GetPosition)(void* self) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -270,6 +275,17 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             ImGui::TextColored(ambient, "Ambient color");
                             ImVec4 diffuse = ImVec4(material.Diffuse.r, material.Diffuse.g, material.Diffuse.b, material.Diffuse.a);
                             ImGui::TextColored(diffuse, "Diffuse color");
+                        }
+
+                        if (strstr(stdstringGUID.c_str(), "21A8923D-B908")) {
+                            Aco_DX8_ObjectDataChannel* objectData = (Aco_DX8_ObjectDataChannel*)channel;
+                            ImGui::Text("Vertex count: %d", Aco_DX8_ObjectDataChannel_GetVertexCount(objectData));
+                        }
+
+                        if (strstr(stdstringGUID.c_str(), "10C20C0A-7A55")) {
+                            //Commenting this out for now because it just results in an access violation
+                            //D3DXVECTOR3 objectPosition = Aco_DX8_ObjectChannel_GetPosition(channel);
+                            //ImGui::Text("Object position:\nX - %d\nY - %d\nZ - %d", objectPosition.x, objectPosition.y, objectPosition.z);
                         }
 
                         ImGui::Spacing();
@@ -494,9 +510,18 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Aco_DX8_Texture_GetTextureDescription =
             (D3DSURFACE_DESC (__thiscall*)(Aco_DX8_Texture*, int))
             DetourFindFunction("BC052C38-2D5D-4f0c-A0CA-654D0AFC584A.dll", "?GetTextureDescription@Aco_DX8_Texture@@UAE?AU_D3DSURFACE_DESC@@H@Z");
+
         Aco_DX8_MaterialChannel_GetMaterial =
             (D3DMATERIAL9 (__thiscall*)(void*))
             DetourFindFunction("376A9C13-8D66-49EC-BAE5-D59BE13BC519.dll", "?GetMaterialValue@Aco_DX8_MaterialChannel@@UAEMH@Z");
+
+        Aco_DX8_ObjectDataChannel_GetVertexCount =
+            (int (__thiscall*)(Aco_DX8_ObjectDataChannel*))
+            DetourFindFunction("21A8923D-B908-4104-AE88-B6718D8A8678.dll", "?GetVertexCount@Aco_DX8_ObjectDataChannel@@UAEHXZ");
+
+        Aco_DX8_ObjectChannel_GetPosition =
+            (D3DXVECTOR3 (__thiscall*)(void*))
+            DetourFindFunction("10C20C0A-7A55-4084-8676-95E5699BCEC2.dll", "?GetPosition@Aco_DX8_ObjectChannel@@UAE?AUD3DXVECTOR3@@XZ");
 #pragma endregion
 
 
