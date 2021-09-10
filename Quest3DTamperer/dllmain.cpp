@@ -300,7 +300,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             ImGui::Text("Default value: %f", Aco_FloatChannel_GetDefaultFloat(channel));
                             ImGui::InputFloat("yes", &newFloat);
                             if (ImGui::Button("Set float")) {
-
+                                Aco_FloatChannel_SetFloat(channel, newFloat);
                             }
                         }
 
