@@ -73,6 +73,12 @@ static D3DMATERIAL9 (__thiscall* Aco_DX8_MaterialChannel_GetMaterial)(void* self
 static int (__thiscall* Aco_DX8_ObjectDataChannel_GetVertexCount)(Aco_DX8_ObjectDataChannel* self) = nullptr;
 
 static D3DXVECTOR3 (__thiscall* Aco_DX8_ObjectChannel_GetPosition)(void* self) = nullptr;
+
+static float (__thiscall* Aco_FloatChannel_GetFloat)(void* self) = nullptr;
+static float (__thiscall* Aco_FloatChannel_GetDefaultFloat)(void* self) = nullptr;
+static void (__thiscall* Aco_FloatChannel_SetFloat)(void* self, float value) = nullptr;
+
+static D3DXVECTOR3 (__thiscall* Aco_VectorChannel_GetVector)(void* self) = nullptr;
 #pragma endregion
 
 static bool init = false;
@@ -91,6 +97,7 @@ char newGroupName[128] = "New Group";
 char newText[1024] = "New Text";
 bool textureLocked = false;
 bool previewTexture = true;
+float newFloat = 0;
 
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
@@ -181,7 +188,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         ImGui::Spacing();
         if (engine != nullptr) {
             if (ImGui::CollapsingHeader("Channel groups")) {
-                ImGui::Text("There is %i channel groups.", engine->GetChannelGroupCount());
+                //ImGui::Text("There is %i channel groups.", engine->GetChannelGroupCount());
                 ImGui::Spacing();
 
                 ImGui::InputText("Pool name for new group", newGroupName, IM_ARRAYSIZE(newGroupName));
@@ -286,6 +293,20 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                             //Commenting this out for now because it just results in an access violation
                             //D3DXVECTOR3 objectPosition = Aco_DX8_ObjectChannel_GetPosition(channel);
                             //ImGui::Text("Object position:\nX - %d\nY - %d\nZ - %d", objectPosition.x, objectPosition.y, objectPosition.z);
+                        }
+
+                        if (strstr(stdstringGUID.c_str(), "BE69CCC4-CFC1")) {
+                            ImGui::Text("Float value: %f", Aco_FloatChannel_GetFloat(channel));
+                            ImGui::Text("Default value: %f", Aco_FloatChannel_GetDefaultFloat(channel));
+                            ImGui::InputFloat("yes", &newFloat);
+                            if (ImGui::Button("Set float")) {
+
+                            }
+                        }
+
+                        if (strstr(stdstringGUID.c_str(), "9D045960-EAC2")) {
+                            //D3DXVECTOR3 vector = Aco_VectorChannel_GetVector(channel);
+                            //ImGui::Text("Vector value: %f, %f, %f", vector.x, vector.y, vector.z);
                         }
 
                         ImGui::Spacing();
@@ -522,6 +543,20 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Aco_DX8_ObjectChannel_GetPosition =
             (D3DXVECTOR3 (__thiscall*)(void*))
             DetourFindFunction("10C20C0A-7A55-4084-8676-95E5699BCEC2.dll", "?GetPosition@Aco_DX8_ObjectChannel@@UAE?AUD3DXVECTOR3@@XZ");
+
+        Aco_FloatChannel_GetFloat =
+            (float (__thiscall*)(void*))
+            DetourFindFunction("BE69CCC4-CFC1-4362-AC81-767D199BBFC3.dll", "?GetFloat@Aco_FloatChannel@@UAEMXZ");
+        Aco_FloatChannel_GetDefaultFloat =
+            (float(__thiscall*)(void*))
+            DetourFindFunction("BE69CCC4-CFC1-4362-AC81-767D199BBFC3.dll", "?GetDefaultFloat@Aco_FloatChannel@@UAEMXZ");
+        Aco_FloatChannel_SetFloat =
+            (void (__thiscall*)(void*, float))
+            DetourFindFunction("BE69CCC4-CFC1-4362-AC81-767D199BBFC3.dll", "?SetFloat@Aco_FloatChannel@@UAEXM@Z");
+
+        Aco_VectorChannel_GetVector =
+            (D3DXVECTOR3 (__thiscall*)(void*))
+            DetourFindFunction("9D045960-EAC2-4C40-9BBF-10F32F7FA305.dll", "?GetVector@Aco_VectorChannel@@UAE?AUD3DXVECTOR3@@XZ");
 #pragma endregion
 
 
