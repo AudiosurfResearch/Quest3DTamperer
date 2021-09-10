@@ -98,6 +98,7 @@ char newText[1024] = "New Text";
 bool textureLocked = false;
 bool previewTexture = true;
 float newFloat = 0;
+char newScript[20000] = "-- Script here!";
 
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
@@ -117,6 +118,21 @@ std::wstring utf8_decode(const std::string& str)
     std::wstring wstrTo(size_needed, 0);
     MultiByteToWideChar(CP_UTF8, 0, &str[0], (int)str.size(), &wstrTo[0], size_needed);
     return wstrTo;
+}
+
+void ToClipboard(HWND hwnd, const std::string& s) {
+    OpenClipboard(hwnd);
+    EmptyClipboard();
+    HGLOBAL hg = GlobalAlloc(GMEM_MOVEABLE, s.size() + 1);
+    if (!hg) {
+        CloseClipboard();
+        return;
+    }
+    memcpy(GlobalLock(hg), s.c_str(), s.size() + 1);
+    GlobalUnlock(hg);
+    SetClipboardData(CF_TEXT, hg);
+    CloseClipboard();
+    GlobalFree(hg);
 }
 
 static void __fastcall CallChannelHook(A3d_Channel* self, DWORD edx)
@@ -233,6 +249,11 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                         if (strstr(stdstringGUID.c_str(), "6E6FB247-4627")) {
                             ImGui::Text("Text in channel: %s", StringChannel_GetString((Aco_StringChannel*)channel));
                             
+                            if (ImGui::Button("Copy to clipboard")) {
+                                ToClipboard(gameHandle, StringChannel_GetString((Aco_StringChannel*)channel));
+                            }
+                            ImGui::Spacing();
+
                             ImGui::InputText("New text to set", newText, IM_ARRAYSIZE(newText));
                             if (ImGui::Button("Set text")) {
                                 StringChannel_SetString((Aco_StringChannel*)channel, newText);
@@ -242,9 +263,19 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                         if (strstr(stdstringGUID.c_str(), "F26BB40B-B196")) {
                             ImGui::Text("Text in channel: %s", StringOperator_GetString(channel));
                         }
-
+                        
                         if (strstr(stdstringGUID.c_str(), "6514FE12-88CF")) {
                             ImGui::Text("Script: \n%s", Lua_GetScript(channel));
+                            
+                            if (ImGui::Button("Copy to clipboard")) {
+                                ToClipboard(gameHandle, Lua_GetScript(channel));
+                            }
+                            ImGui::Spacing();
+
+                            ImGui::InputTextMultiline("New script", newScript, IM_ARRAYSIZE(newScript));
+                            if (ImGui::Button("Set script")) {
+                                Lua_SetScript(channel, newScript);
+                            }
                         }
 
                         if (strstr(stdstringGUID.c_str(), "BC052C38-2D5D")) {
@@ -298,7 +329,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                         if (strstr(stdstringGUID.c_str(), "BE69CCC4-CFC1")) {
                             ImGui::Text("Float value: %f", Aco_FloatChannel_GetFloat(channel));
                             ImGui::Text("Default value: %f", Aco_FloatChannel_GetDefaultFloat(channel));
-                            ImGui::InputFloat("yes", &newFloat);
+                            ImGui::InputFloat("New float", &newFloat);
                             if (ImGui::Button("Set float")) {
                                 Aco_FloatChannel_SetFloat(channel, newFloat);
                             }
