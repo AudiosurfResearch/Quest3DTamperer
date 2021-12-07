@@ -51,6 +51,21 @@
     <ClInclude Include="imgui\imfilebrowser.h">
       <Filter>Headerdateien</Filter>
     </ClInclude>
+    <ClInclude Include="UGraphviz\Attrs.hpp">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="UGraphviz\Graph.hpp">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="UGraphviz\Registry.hpp">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="UGraphviz\Subgraph.hpp">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
+    <ClInclude Include="UGraphviz\UGraphviz.hpp">
+      <Filter>Headerdateien</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp">
@@ -81,6 +96,15 @@
       <Filter>Quelldateien</Filter>
     </ClCompile>
     <ClCompile Include="imgui\imgui_demo.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="UGraphviz\Graph.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="UGraphviz\Registry.cpp">
+      <Filter>Quelldateien</Filter>
+    </ClCompile>
+    <ClCompile Include="UGraphviz\Subgraph.cpp">
       <Filter>Quelldateien</Filter>
     </ClCompile>
   </ItemGroup>

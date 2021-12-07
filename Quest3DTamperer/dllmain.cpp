@@ -6,6 +6,7 @@
 #include <assert.h>
 #include <detours.h>
 #include <fstream>
+#include <iostream>
 
 #include "imgui/imgui.h"
 #include "imgui/backends/imgui_impl_win32.h"
@@ -22,6 +23,13 @@
 #include <Aco_String.h>
 #include <Aco_DX8_Texture.h>
 #include <Aco_DX8_ObjectData.h>
+
+//UGraphviz
+#include "UGraphviz/UGraphviz.hpp"
+
+//Graphviz
+#include <graphviz/gvc.h>
+using namespace Ubpa;
 
 //DISCLAIMER: I have literally never done DirectX stuff before
 typedef long(__stdcall* Reset)(LPDIRECT3DDEVICE9, D3DPRESENT_PARAMETERS*);
@@ -49,6 +57,9 @@ static int(__thiscall* ChannelGroup_GetGroupIndex)(A3d_ChannelGroup* self) = nul
 static void(__thiscall* ChannelGroup_CallStartChannel)(A3d_ChannelGroup* self) = nullptr;
 
 static const char* (__thiscall* Channel_GetChannelName)(A3d_Channel* self) = nullptr;
+static A3d_Channel* (__thiscall* Channel_GetChild)(A3d_Channel* self, int childNr) = nullptr;
+static int (__thiscall* Channel_GetChildCount)(A3d_Channel* self) = nullptr;
+static int(__thiscall* Channel_GetChannelIDIndexNr)(A3d_Channel* self) = nullptr;
 
 static const char* (__thiscall* StringChannel_GetString)(Aco_StringChannel* self) = nullptr;
 static const char* (__thiscall* StringOperator_GetString)(void* self) = nullptr;
@@ -71,6 +82,7 @@ static D3DSURFACE_DESC (__thiscall* Aco_DX8_Texture_GetTextureDescription)(Aco_D
 static D3DMATERIAL9 (__thiscall* Aco_DX8_MaterialChannel_GetMaterial)(void* self) = nullptr;
 
 static int (__thiscall* Aco_DX8_ObjectDataChannel_GetVertexCount)(Aco_DX8_ObjectDataChannel* self) = nullptr;
+static D3DXVECTOR3 (__thiscall* Aco_DX8_ObjectDataChannel_GetVertexPosition)(Aco_DX8_ObjectDataChannel* self, DWORD nr) = nullptr;
 
 static D3DXVECTOR3 (__thiscall* Aco_DX8_ObjectChannel_GetPosition)(void* self) = nullptr;
 
@@ -87,6 +99,7 @@ HWND gameHandle;
 WNDPROC g_WndProc_o;
 ImGui::FileBrowser saveGroupFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
 ImGui::FileBrowser saveTextureFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
+ImGui::FileBrowser saveGraphFileDialog(ImGuiFileBrowserFlags_EnterNewFilename | ImGuiFileBrowserFlags_CreateNewDir);
 ImGui::FileBrowser loadGroupFileDialog(0);
 ImGui::FileBrowser loadTextureFileDialog(0);
 EngineInterface* engine = nullptr;
@@ -99,6 +112,7 @@ bool textureLocked = false;
 bool previewTexture = true;
 float newFloat = 0;
 char newScript[20000] = "-- Script here!";
+UGraphviz::Graph* channelGraph;
 
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
@@ -143,6 +157,51 @@ static void __fastcall CallChannelHook(A3d_Channel* self, DWORD edx)
     }
 }
 
+void writeChannel(A3d_Channel* channel, UGraphviz::Graph* graph)
+{
+    auto& registry = graph->GetRegistry();
+    GUID channelGuid(channel->GetChannelType().guid);
+    size_t childNode = 0;
+    auto node = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(channel)));
+
+    if (!registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(channel))))
+    {
+        std::string nodeLabel;
+        nodeLabel += Channel_GetChannelName(channel);
+        nodeLabel += "\n";
+        nodeLabel += channel->GetChannelType().name;
+        registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
+        registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
+        graph->AddNode(node);
+    }
+
+    const int children = Channel_GetChildCount(channel);
+
+    for (int i{}; i < children; ++i)
+    {
+        A3d_Channel* child(Channel_GetChild(channel, i));
+
+        if (child)
+        {
+            if (!registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(child))))
+            {
+                childNode = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(child)));
+                std::string nodeLabel;
+                nodeLabel += Channel_GetChannelName(channel);
+                nodeLabel += "\n";
+                nodeLabel += channel->GetChannelType().name;
+                registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_label, nodeLabel);
+                registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_shape, "box");
+                graph->AddNode(childNode);
+                writeChannel(child, graph);
+            }
+
+            auto edge = registry.RegisterEdge(node, registry.GetNodeIndex(std::to_string(Channel_GetChannelIDIndexNr(child))));
+            graph->AddEdge(edge);
+        }
+    }
+}
+
 LRESULT __stdcall CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
 {
     if (ImGui_ImplWin32_WndProcHandler(hWnd, uMsg, wParam, lParam) && showMenu)
@@ -183,6 +242,9 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
         loadTextureFileDialog.SetTitle("Load texture");
         loadTextureFileDialog.SetTypeFilters({ ".tga", ".png", ".jpg" });
+
+        saveGraphFileDialog.SetTitle("Save DOT Digraph");
+        saveGraphFileDialog.SetTypeFilters({ ".gv" });
 
         init = true;
     }
@@ -246,8 +308,14 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
 
                         ImGui::Text(stdstringGUID.c_str());
 
+                        if (ImGui::Button("Save as DOT Digraph")) {
+                            saveGraphFileDialog.Open();
+                        }
+
                         if (strstr(stdstringGUID.c_str(), "6E6FB247-4627")) {
-                            ImGui::Text("Text in channel: %s", StringChannel_GetString((Aco_StringChannel*)channel));
+                            Aco_StringChannel* stringChannel(reinterpret_cast<Aco_StringChannel*>(channel));
+
+                        	ImGui::Text("Text in channel: %s", StringChannel_GetString(stringChannel));
                             
                             if (ImGui::Button("Copy to clipboard")) {
                                 ToClipboard(gameHandle, StringChannel_GetString((Aco_StringChannel*)channel));
@@ -271,7 +339,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                                 ToClipboard(gameHandle, Lua_GetScript(channel));
                             }
                             ImGui::Spacing();
-
+                            
                             ImGui::InputTextMultiline("New script", newScript, IM_ARRAYSIZE(newScript));
                             if (ImGui::Button("Set script")) {
                                 Lua_SetScript(channel, newScript);
@@ -323,6 +391,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                         if (strstr(stdstringGUID.c_str(), "10C20C0A-7A55")) {
                             //Commenting this out for now because it just results in an access violation
                             //D3DXVECTOR3 objectPosition = Aco_DX8_ObjectChannel_GetPosition(channel);
+                            
                             //ImGui::Text("Object position:\nX - %d\nY - %d\nZ - %d", objectPosition.x, objectPosition.y, objectPosition.z);
                         }
 
@@ -357,6 +426,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         loadGroupFileDialog.Display();
         saveTextureFileDialog.Display();
         loadTextureFileDialog.Display();
+        saveGraphFileDialog.Display();
 
         if (saveGroupFileDialog.HasSelected())
         {
@@ -401,6 +471,17 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                 textureLocked = false;
             }
             loadGroupFileDialog.ClearSelected();
+        }
+        if (saveGraphFileDialog.HasSelected()) {
+            channelGraph = new UGraphviz::Graph(ChannelGroup_GetPoolName(group), true);
+            writeChannel(ChannelGroup_GetChannel(group, 0), channelGraph);
+
+            std::ofstream file(saveGraphFileDialog.GetSelected().string().c_str(), std::ofstream::trunc);
+			std::string dotSource = channelGraph->Dump();
+            file << dotSource.c_str();
+            file.close();
+
+            saveGraphFileDialog.ClearSelected();
         }
 
         ImGui::EndFrame();
@@ -514,6 +595,15 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Channel_GetChannelName =
             (const char* (__thiscall*)(A3d_Channel*))
             DetourFindFunction("highpoly.dll", "?GetChannelName@A3d_Channel@@QAEPBDXZ");
+        Channel_GetChild =
+            (A3d_Channel* (__thiscall*)(A3d_Channel*, int))
+            DetourFindFunction("highpoly.dll", "?GetChild@A3d_Channel@@QAEPAV1@H@Z");
+        Channel_GetChildCount =
+            (int (__thiscall*)(A3d_Channel*))
+            DetourFindFunction("highpoly.dll", "?GetChildCount@A3d_Channel@@QAEHXZ");
+        Channel_GetChannelIDIndexNr =
+            (int (__thiscall*)(A3d_Channel*))
+            DetourFindFunction("highpoly.dll", "?GetChannelIDIndexNr@A3d_Channel@@QAEHXZ");
 
         StringChannel_GetString =
             (const char* (__thiscall*)(Aco_StringChannel*))
@@ -570,6 +660,9 @@ BOOL APIENTRY DllMain( HMODULE hModule,
         Aco_DX8_ObjectDataChannel_GetVertexCount =
             (int (__thiscall*)(Aco_DX8_ObjectDataChannel*))
             DetourFindFunction("21A8923D-B908-4104-AE88-B6718D8A8678.dll", "?GetVertexCount@Aco_DX8_ObjectDataChannel@@UAEHXZ");
+        Aco_DX8_ObjectDataChannel_GetVertexPosition =
+            (D3DXVECTOR3 (__thiscall*)(Aco_DX8_ObjectDataChannel*, DWORD))
+            DetourFindFunction("21A8923D-B908-4104-AE88-B6718D8A8678.dll", "?GetVertexPosition@Aco_DX8_ObjectDataChannel@@UAE?AUD3DXVECTOR3@@K@Z");
 
         Aco_DX8_ObjectChannel_GetPosition =
             (D3DXVECTOR3 (__thiscall*)(void*))
