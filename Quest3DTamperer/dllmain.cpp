@@ -157,21 +157,75 @@ static void __fastcall CallChannelHook(A3d_Channel* self, DWORD edx)
     }
 }
 
+std::string GetChannelValue(A3d_Channel* channel)
+{
+    OLECHAR* guidOLECHAR;
+    StringFromCLSID(channel->GetChannelType().guid, &guidOLECHAR);
+    std::wstring wstring = std::wstring(guidOLECHAR);
+    std::string guid = utf8_encode(wstring);
+
+    if (strstr(guid.c_str(), "6E6FB247-4627"))
+    {
+        return StringChannel_GetString((Aco_StringChannel*)channel);
+    }
+    if (strstr(guid.c_str(), "BE69CCC4-CFC1")) {
+        std::string resultString;
+        resultString += std::to_string(Aco_FloatChannel_GetFloat(channel));
+        resultString += "\nDefault Value: ";
+        resultString += std::to_string(Aco_FloatChannel_GetDefaultFloat(channel));
+        return resultString;
+    }
+    if (strstr(guid.c_str(), "F26BB40B-B196")) {
+        return StringOperator_GetString(channel);
+    }
+    if (strstr(guid.c_str(), "21A8923D-B908")) {
+        std::string resultString;
+    	Aco_DX8_ObjectDataChannel* objectData = (Aco_DX8_ObjectDataChannel*)channel;
+        resultString += Aco_DX8_ObjectDataChannel_GetVertexCount(objectData);
+        resultString += " (Vertex Count)";
+        return resultString;
+    }
+
+    return "";
+}
+
+//i swear i was just high
+//might redo at some point but it does function
 void writeChannel(A3d_Channel* channel, UGraphviz::Graph* graph)
 {
     auto& registry = graph->GetRegistry();
     GUID channelGuid(channel->GetChannelType().guid);
     size_t childNode = 0;
     auto node = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(channel)));
-
+    
     if (!registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(channel))))
     {
         std::string nodeLabel;
         nodeLabel += Channel_GetChannelName(channel);
         nodeLabel += "\n";
         nodeLabel += channel->GetChannelType().name;
+        std::string channelValue = GetChannelValue(channel);
+        if (!channelValue.empty())
+        {
+            nodeLabel += "\nChannel value: ";
+            nodeLabel += channelValue;
+        }
         registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
         registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
+        graph->AddNode(node);
+    }
+
+    if (Channel_GetChannelIDIndexNr(channel) == 0)
+    {
+        std::string nodeLabel;
+        nodeLabel += Channel_GetChannelName(channel);
+        nodeLabel += "\n";
+        nodeLabel += channel->GetChannelType().name;
+        nodeLabel += "\nChannel value: ";
+        nodeLabel += GetChannelValue(channel);
+        registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
+        registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
+        registry.RegisterNodeAttr(node, UGraphviz::Attrs_color, "green");
         graph->AddNode(node);
     }
 
@@ -190,6 +244,12 @@ void writeChannel(A3d_Channel* channel, UGraphviz::Graph* graph)
                 nodeLabel += Channel_GetChannelName(channel);
                 nodeLabel += "\n";
                 nodeLabel += channel->GetChannelType().name;
+                std::string channelValue = GetChannelValue(channel);
+                if (!channelValue.empty())
+                {
+                    nodeLabel += "\nChannel value: ";
+                    nodeLabel += channelValue;
+                }
                 registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_label, nodeLabel);
                 registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_shape, "box");
                 graph->AddNode(childNode);
@@ -474,7 +534,7 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
         }
         if (saveGraphFileDialog.HasSelected()) {
             channelGraph = new UGraphviz::Graph(ChannelGroup_GetPoolName(group), true);
-            writeChannel(ChannelGroup_GetChannel(group, 0), channelGraph);
+            writeChannel(ChannelGroup_GetChannel(group, channelInGroupToUse), channelGraph);
 
             std::ofstream file(saveGraphFileDialog.GetSelected().string().c_str(), std::ofstream::trunc);
 			std::string dotSource = channelGraph->Dump();
