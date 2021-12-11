@@ -16,7 +16,16 @@ This tool is not supposed to:
 - Remove protection and read-only status from channel groups and save them, allowing them to be opened by the Quest3D editor for inspection or editing.
 - Load .cgr files into the game (**NOTE:** Not tested properly, don't count on it working)
 - Read (and change) strings of some channels (Support added for the most common ones)
-- Read script source code of Lua script channels
+- Read and modify script source code of Lua script channels
 - Extract textures
+- Ability to write channel groups as [DOT files](https://en.wikipedia.org/wiki/DOT_(graph_description_language)) to visualize them as a digraph
 
 More to come soon-ish.
+
+# Dependencies
+- The Quest3D 4.0 SDK (4.2 might work too)
+- [UGraphViz](https://github.com/Ubpa/UGraphviz)
+- [kiero](https://github.com/Rebzzel/kiero)
+- [Dear ImGui](https://github.com/ocornut/imgui)
+- [Graphviz](https://gitlab.com/graphviz/graphviz/)
+- [Detours](https://github.com/microsoft/Detours)
