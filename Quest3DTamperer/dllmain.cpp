@@ -21,6 +21,7 @@
 #include <A3d_Channels.h>
 #include <A3d_EngineInterface.h>
 #include <Aco_String.h>
+#include <Aco_Float.h>
 #include <Aco_DX8_Texture.h>
 #include <Aco_DX8_ObjectData.h>
 
@@ -114,6 +115,16 @@ float newFloat = 0;
 char newScript[20000] = "-- Script here!";
 UGraphviz::Graph* channelGraph;
 
+int channelDumpIndex = 0;
+int childrenDumpIndex = 0;
+
+//credits to Zerkg for finding out how to use an A3d_String
+struct Offset
+{
+    char buffer[4];
+    const char* str;
+};
+
 // Convert a wide Unicode string to an UTF8 string
 std::string utf8_encode(const std::wstring& wstr)
 {
@@ -149,6 +160,14 @@ void ToClipboard(HWND hwnd, const std::string& s) {
     GlobalFree(hg);
 }
 
+bool replace(std::string& str, const std::string& from, const std::string& to) {
+    size_t start_pos = str.find(from);
+    if (start_pos == std::string::npos)
+        return false;
+    str.replace(start_pos, from.length(), to);
+    return true;
+}
+
 static void __fastcall CallChannelHook(A3d_Channel* self, DWORD edx)
 {
     TrueCallChannel(self);
@@ -162,23 +181,41 @@ std::string GetChannelValue(A3d_Channel* channel)
     OLECHAR* guidOLECHAR;
     StringFromCLSID(channel->GetChannelType().guid, &guidOLECHAR);
     std::wstring wstring = std::wstring(guidOLECHAR);
-    std::string guid = utf8_encode(wstring);
+    std::string guidstr = utf8_encode(wstring);
+    auto guid(channel->GetChannelType().guid);
 
-    if (strstr(guid.c_str(), "6E6FB247-4627"))
+
+    if (guid == STRING_GUID)
     {
-        return StringChannel_GetString((Aco_StringChannel*)channel);
+        auto channelString = StringChannel_GetString((Aco_StringChannel*)channel);
+        if (channelString)
+        {
+            return channelString;
+        }
+        else
+        {
+            return "(nullptr)";
+        }
     }
-    if (strstr(guid.c_str(), "BE69CCC4-CFC1")) {
+    if (guid == FLOAT_CHANNEL_GUID) {
         std::string resultString;
         resultString += std::to_string(Aco_FloatChannel_GetFloat(channel));
         resultString += "\nDefault Value: ";
         resultString += std::to_string(Aco_FloatChannel_GetDefaultFloat(channel));
         return resultString;
     }
-    if (strstr(guid.c_str(), "F26BB40B-B196")) {
-        return StringOperator_GetString(channel);
+    if (strstr(guidstr.c_str(), "F26BB40B-B196")) {
+        auto channelString = StringOperator_GetString(channel);
+        if (channelString)
+        {
+            return channelString;
+        }
+        else
+        {
+            return "(nullptr)";
+        }
     }
-    if (strstr(guid.c_str(), "21A8923D-B908")) {
+    if (strstr(guidstr.c_str(), "21A8923D-B908")) {
         std::string resultString;
     	Aco_DX8_ObjectDataChannel* objectData = (Aco_DX8_ObjectDataChannel*)channel;
         resultString += Aco_DX8_ObjectDataChannel_GetVertexCount(objectData);
@@ -191,75 +228,65 @@ std::string GetChannelValue(A3d_Channel* channel)
 
 //i swear i was just high
 //might redo at some point but it does function
-void writeChannel(A3d_Channel* channel, UGraphviz::Graph* graph)
+void writeChannel(A3d_ChannelGroup* group, UGraphviz::Graph* graph)
 {
-    auto& registry = graph->GetRegistry();
-    GUID channelGuid(channel->GetChannelType().guid);
-    size_t childNode = 0;
-    auto node = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(channel)));
-    
-    if (!registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(channel))))
-    {
-        std::string nodeLabel;
-        nodeLabel += Channel_GetChannelName(channel);
-        nodeLabel += "\n";
-        nodeLabel += channel->GetChannelType().name;
-        std::string channelValue = GetChannelValue(channel);
-        if (!channelValue.empty())
-        {
-            nodeLabel += "\nChannel value: ";
-            nodeLabel += channelValue;
-        }
-        registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
-        registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
-        graph->AddNode(node);
-    }
+	auto& registry = graph->GetRegistry();
 
-    if (Channel_GetChannelIDIndexNr(channel) == 0)
-    {
-        std::string nodeLabel;
-        nodeLabel += Channel_GetChannelName(channel);
-        nodeLabel += "\n";
-        nodeLabel += channel->GetChannelType().name;
-        nodeLabel += "\nChannel value: ";
-        nodeLabel += GetChannelValue(channel);
-        registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
-        registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
-        registry.RegisterNodeAttr(node, UGraphviz::Attrs_color, "green");
-        graph->AddNode(node);
-    }
+	for (int i{}; i < 50000; ++i)
+	{
+		A3d_Channel* channel = ChannelGroup_GetChannel(group, i);
+		if (channel)
+		{
+			GUID channelGuid(channel->GetChannelType().guid);
+			auto node = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(channel)));
 
-    const int children = Channel_GetChildCount(channel);
+			std::string nodeLabel;
+			nodeLabel += Channel_GetChannelName(channel);
+			nodeLabel += "\\n";
+			nodeLabel += channel->GetChannelType().name;
+			std::string channelValue = GetChannelValue(channel);
+            //Graphviz gets tripped up, newlines need to literally be "\n"
+            replace(channelValue, "\n", "\\n");
+			if (!channelValue.empty())
+			{
+				nodeLabel += "\\nChannel value: ";
+				nodeLabel += channelValue;
+			}
+			registry.RegisterNodeAttr(node, UGraphviz::Attrs_label, nodeLabel);
+			registry.RegisterNodeAttr(node, UGraphviz::Attrs_shape, "box");
+			if (Channel_GetChannelIDIndexNr(channel) == 0)
+			{
+				registry.RegisterNodeAttr(node, UGraphviz::Attrs_color, "green");
+			}
+			graph->AddNode(node);
+		}
+	}
 
-    for (int i{}; i < children; ++i)
-    {
-        A3d_Channel* child(Channel_GetChild(channel, i));
+	for (int channelnum{}; channelnum < 50000; ++channelnum)
+	{
+		A3d_Channel* channel = ChannelGroup_GetChannel(group, channelnum);
 
-        if (child)
-        {
-            if (!registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(child))))
-            {
-                childNode = registry.RegisterNode(std::to_string(Channel_GetChannelIDIndexNr(child)));
-                std::string nodeLabel;
-                nodeLabel += Channel_GetChannelName(channel);
-                nodeLabel += "\n";
-                nodeLabel += channel->GetChannelType().name;
-                std::string channelValue = GetChannelValue(channel);
-                if (!channelValue.empty())
-                {
-                    nodeLabel += "\nChannel value: ";
-                    nodeLabel += channelValue;
-                }
-                registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_label, nodeLabel);
-                registry.RegisterNodeAttr(childNode, UGraphviz::Attrs_shape, "box");
-                graph->AddNode(childNode);
-                writeChannel(child, graph);
-            }
+		channel = ChannelGroup_GetChannel(group, childrenDumpIndex);
 
-            auto edge = registry.RegisterEdge(node, registry.GetNodeIndex(std::to_string(Channel_GetChannelIDIndexNr(child))));
-            graph->AddEdge(edge);
-        }
-    }
+		if (channel)
+		{
+			const int children = Channel_GetChildCount(channel);
+
+			for (int childnum{}; childnum < children; ++childnum)
+			{
+				A3d_Channel* child(Channel_GetChild(channel, childnum));
+
+				if (child)
+				{
+					if (registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(child))) && registry.IsRegisteredNode(std::to_string(Channel_GetChannelIDIndexNr(channel))))
+					{
+						auto edge = registry.RegisterEdge(registry.GetNodeIndex(std::to_string(Channel_GetChannelIDIndexNr(channel))), registry.GetNodeIndex(std::to_string(Channel_GetChannelIDIndexNr(child))));
+						graph->AddEdge(edge);
+					}
+				}
+			}
+		}
+	}
 }
 
 LRESULT __stdcall CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
@@ -533,8 +560,10 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
             loadGroupFileDialog.ClearSelected();
         }
         if (saveGraphFileDialog.HasSelected()) {
+            channelDumpIndex = 0;
+            childrenDumpIndex = 0;
             channelGraph = new UGraphviz::Graph(ChannelGroup_GetPoolName(group), true);
-            writeChannel(ChannelGroup_GetChannel(group, channelInGroupToUse), channelGraph);
+            writeChannel(group, channelGraph);
 
             std::ofstream file(saveGraphFileDialog.GetSelected().string().c_str(), std::ofstream::trunc);
 			std::string dotSource = channelGraph->Dump();
