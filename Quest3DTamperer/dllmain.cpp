@@ -160,12 +160,15 @@ void ToClipboard(HWND hwnd, const std::string& s) {
     GlobalFree(hg);
 }
 
-bool replace(std::string& str, const std::string& from, const std::string& to) {
-    size_t start_pos = str.find(from);
-    if (start_pos == std::string::npos)
-        return false;
-    str.replace(start_pos, from.length(), to);
-    return true;
+std::size_t replace(std::string& inout, std::string_view what, std::string_view with)
+{
+    std::size_t count{};
+    for (std::string::size_type pos{};
+        inout.npos != (pos = inout.find(what.data(), pos, what.length()));
+        pos += with.length(), ++count) {
+        inout.replace(pos, what.length(), with.data(), with.length());
+    }
+    return count;
 }
 
 static void __fastcall CallChannelHook(A3d_Channel* self, DWORD edx)
@@ -232,8 +235,13 @@ void writeChannel(A3d_ChannelGroup* group, UGraphviz::Graph* graph)
 			nodeLabel += "\\n";
 			nodeLabel += channel->GetChannelType().name;
 			std::string channelValue = GetChannelValue(channel);
-            //Graphviz gets tripped up, newlines need to literally be "\n"
+            //Backslashes need to be escaped
+            replace(channelValue, "\\", "\\\\");
+            //Graphviz can't cope with newlines either, so they need to be replaced with the literal "\n"
+            replace(channelValue, "\r\n", "\\n");
             replace(channelValue, "\n", "\\n");
+            //Escape quotes as well!
+            replace(channelValue, "\"", "\\\"");
 			if (!channelValue.empty())
 			{
 				nodeLabel += "\\nChannel value: ";
