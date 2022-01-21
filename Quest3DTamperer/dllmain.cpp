@@ -192,10 +192,7 @@ std::string GetChannelValue(A3d_Channel* channel)
         {
             return channelString;
         }
-        else
-        {
-            return "(nullptr)";
-        }
+        return "(nullptr)";
     }
     if (guid == FLOAT_CHANNEL_GUID) {
         std::string resultString;
@@ -210,17 +207,7 @@ std::string GetChannelValue(A3d_Channel* channel)
         {
             return channelString;
         }
-        else
-        {
-            return "(nullptr)";
-        }
-    }
-    if (strstr(guidstr.c_str(), "21A8923D-B908")) {
-        std::string resultString;
-    	Aco_DX8_ObjectDataChannel* objectData = (Aco_DX8_ObjectDataChannel*)channel;
-        resultString += Aco_DX8_ObjectDataChannel_GetVertexCount(objectData);
-        resultString += " (Vertex Count)";
-        return resultString;
+        return "(nullptr)";
     }
 
     return "";
@@ -265,8 +252,6 @@ void writeChannel(A3d_ChannelGroup* group, UGraphviz::Graph* graph)
 	for (int channelnum{}; channelnum < 50000; ++channelnum)
 	{
 		A3d_Channel* channel = ChannelGroup_GetChannel(group, channelnum);
-
-		channel = ChannelGroup_GetChannel(group, childrenDumpIndex);
 
 		if (channel)
 		{
