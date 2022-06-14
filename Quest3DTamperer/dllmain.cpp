@@ -366,9 +366,9 @@ long __stdcall hkEndScene(LPDIRECT3DDEVICE9 pDevice)
                     ImGui::Text("Is group protected: %s", ChannelGroup_GetGroupIsProtected ? "true" : "false");
                     ImGui::Text("Is group read-only: %s", ChannelGroup_GetGroupIsProtected ? "true" : "false");
                     if (ImGui::Button("Save group without protection")) {
-                        ChannelGroup_SetReadOnly(group, false);
-                        ChannelGroup_SetGroupIsProtected(group, false);
-                        saveGroupFileDialog.Open();
+                        ChannelGroup_SetReadOnly(group, false); //cope
+                        ChannelGroup_SetGroupIsProtected(group, false); //seethe
+                        saveGroupFileDialog.Open(); // mald
                     }
                     ImGui::Spacing();
 
