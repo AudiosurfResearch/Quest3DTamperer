@@ -1,3 +1,10 @@
+>[!IMPORTANT]
+> This repo does not seem to work anymore. Please be aware of this. The code is really bad, as this was my first time using C++ in a proper project.
+>
+> As of now, I am not actively working on this. Instead, I'm working on other projects under this organization.
+>
+> If you have questions about Quest3D, you may contact me and I will try to answer to the best of my ability.
+
 # Quest3DTamperer
 **PLEASE NOTE THAT THIS IS STILL IN VERY EARLY DEVELOPMENT!**
 
